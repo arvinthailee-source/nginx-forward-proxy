@@ -1,0 +1,51 @@
+FROM nginx:latest  
+LABEL "language"="nginx"  
+LABEL "framework"="nginx"  
+# 删除默认配置  
+RUN rm -rf /etc/nginx/conf.d/*  
+# 创建正向代理配置  
+RUN cat > /etc/nginx/nginx.conf << 'EOF'  
+user nginx;  
+worker_processes auto;  
+error_log stderr warn;  
+pid /var/run/nginx.pid;  
+events {  
+    worker_connections 2048;  
+}  
+http {  
+    include /etc/nginx/mime.types;  
+    default_type application/octet-stream;  
+    log_format main '$remote_addr - $remote_user [$time_local] "$request" '  
+                    '$status $body_bytes_sent "$http_referer" '  
+                    '"$http_user_agent" "$http_x_forwarded_for"';  
+    access_log /dev/stdout main;  
+    error_log /dev/stderr warn;  
+    sendfile on;  
+    tcp_nopush on;  
+    tcp_nodelay on;  
+    keepalive_timeout 65;  
+    types_hash_max_size 2048;  
+    client_max_body_size 100M;  
+    # HTTP 正向代理  
+    server {  
+        listen 8080 default_server;  
+        server_name _;  
+        resolver 8.8.8.8 8.8.4.4 valid=300s;  
+        resolver_timeout 10s;  
+        # 正向代理配置  
+        location / {  
+            proxy_pass http://$http_host$request_uri;  
+            proxy_set_header Host $http_host;  
+            proxy_set_header X-Real-IP $remote_addr;  
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  
+            proxy_set_header X-Forwarded-Proto $scheme;  
+            proxy_connect_timeout 600;  
+            proxy_send_timeout 600;  
+            proxy_read_timeout 600;  
+            send_timeout 600;  
+        }  
+    }  
+}  
+EOF  
+EXPOSE 8080  
+CMD ["nginx", "-g", "daemon off;"]  
